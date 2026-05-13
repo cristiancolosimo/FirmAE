@@ -113,7 +113,7 @@ def checkVariable(key):
 def stripTimestamps(data):
     lines = data.split(b"\n")
     #throw out the timestamps
-    prog = re.compile(b"^\[[^\]]*\] firmadyne: ")
+    prog = re.compile(rb"^\[[^\]]*\] firmadyne: ")
     lines = [prog.sub(b"", l) for l in lines]
     return lines
 
@@ -128,7 +128,7 @@ def findMacChanges(data, endianness):
         fmt = ">I"
     elif endianness == "el":
         fmt = "<I"
-    prog = re.compile(b"^ioctl_SIOCSIFHWADDR\[[^\]]+\]: dev:([^ ]+) mac:0x([0-9a-f]+) 0x([0-9a-f]+)")
+    prog = re.compile(rb"^ioctl_SIOCSIFHWADDR\[[^\]]+\]: dev:([^ ]+) mac:0x([0-9a-f]+) 0x([0-9a-f]+)")
     for c in candidates:
         g = prog.match(c)
         if g:
@@ -148,7 +148,7 @@ def findPorts(data, endianness):
         fmt = ">I"
     elif endianness == "el":
         fmt = "<I"
-    prog = re.compile(b"^inet_bind\[[^\]]+\]: proto:SOCK_(DGRAM|STREAM), ip:port: 0x([0-9a-f]+):([0-9]+)")
+    prog = re.compile(rb"^inet_bind\[[^\]]+\]: proto:SOCK_(DGRAM|STREAM), ip:port: 0x([0-9a-f]+):([0-9]+)")
     portSet = {}
     for c in candidates:
         g = prog.match(c)
@@ -173,7 +173,7 @@ def findNonLoInterfaces(data, endianness):
         fmt = ">I"
     elif endianness == "el":
         fmt = "<I"
-    prog = re.compile(b"^__inet_insert_ifa\[[^\]]+\]: device:([^ ]+) ifa:0x([0-9a-f]+)")
+    prog = re.compile(rb"^__inet_insert_ifa\[[^\]]+\]: device:([^ ]+) ifa:0x([0-9a-f]+)")
     for c in candidates:
         g = prog.match(c)
         if g:
@@ -188,7 +188,7 @@ def findIfacesForBridge(data, brif):
     lines = stripTimestamps(data)
     result = []
     candidates = filter(lambda l: l.startswith(b"br_dev_ioctl") or l.startswith(b"br_add_if"), lines)
-    progs = [re.compile(p % brif.encode()) for p in [b"^br_dev_ioctl\[[^\]]+\]: br:%s dev:(.*)", b"^br_add_if\[[^\]]+\]: br:%s dev:(.*)"]]
+    progs = [re.compile(p % brif.encode()) for p in [rb"^br_dev_ioctl\[[^\]]+\]: br:%s dev:(.*)", rb"^br_add_if\[[^\]]+\]: br:%s dev:(.*)"]]
     for c in candidates:
         for p in progs:
             g = p.match(c)
@@ -205,7 +205,7 @@ def findVlanInfoForDev(data, dev):
     lines = stripTimestamps(data)
     results = []
     candidates = filter(lambda l: l.startswith(b"register_vlan_dev"), lines)
-    prog = re.compile(b"register_vlan_dev\[[^\]]+\]: dev:%s vlan_id:([0-9]+)" % dev.encode())
+    prog = re.compile(rb"register_vlan_dev\[[^\]]+\]: dev:%s vlan_id:([0-9]+)" % dev.encode())
     for c in candidates:
         g = prog.match(c)
         if g:
@@ -525,7 +525,7 @@ def inferNetwork(iid, arch, endianness, init):
 
     print("Running firmware %d: terminating after %d secs..." % (iid, TIMEOUT))
 
-    cmd = "timeout --preserve-status --signal SIGINT {0} ".format(TIMEOUT)
+    cmd = "timeout --kill-after=10 --preserve-status --signal SIGINT {0} ".format(TIMEOUT)
     cmd += "{0}/run.{1}.sh \"{2}\" \"{3}\" ".format(SCRIPTDIR,
                                                     arch + endianness,
                                                     iid,

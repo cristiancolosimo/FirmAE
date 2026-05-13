@@ -78,15 +78,13 @@ mkdir "${IMAGE_DIR}/firmadyne/"
 mkdir "${IMAGE_DIR}/firmadyne/libnvram/"
 mkdir "${IMAGE_DIR}/firmadyne/libnvram.override/"
 
-cp $(which busybox) "${IMAGE_DIR}"
-cp $(which bash-static) "${IMAGE_DIR}"
+cp "${BINARY_DIR}/busybox.x86_64" "${IMAGE_DIR}/busybox"
 echo "----Finding Init (chroot)----"
 if [ -e "${WORK_DIR}/kernelInit" ]; then
   cp "${WORK_DIR}/kernelInit" "${IMAGE_DIR}"
 fi
 cp "${SCRIPT_DIR}/inferFile.sh" "${IMAGE_DIR}"
-FIRMAE_BOOT=${FIRMAE_BOOT} FIRMAE_ETC=${FIRMAE_ETC} chroot "${IMAGE_DIR}" /bash-static /inferFile.sh
-rm "${IMAGE_DIR}/bash-static"
+FIRMAE_BOOT=${FIRMAE_BOOT} FIRMAE_ETC=${FIRMAE_ETC} chroot "${IMAGE_DIR}" /busybox ash /inferFile.sh
 rm "${IMAGE_DIR}/inferFile.sh"
 if [ -e "${IMAGE_DIR}/kernelInit" ]; then
   rm "${IMAGE_DIR}/kernelInit"
@@ -140,7 +138,7 @@ umount "${IMAGE_DIR}"
 del_partition ${DEVICE:0:$((${#DEVICE}-2))}
 
 DEVICE=`add_partition ${IMAGE}`
-e2fsck -y ${DEVICE}
+e2fsck -y ${DEVICE} || true
 sync
 sleep 1
 del_partition ${DEVICE:0:$((${#DEVICE}-2))}

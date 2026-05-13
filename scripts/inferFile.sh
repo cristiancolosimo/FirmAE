@@ -3,30 +3,32 @@ BUSYBOX="/busybox"
 ${BUSYBOX} touch /firmadyne/init
 
 if (${FIRMAE_BOOT}); then
-  arr=()
+  files=""
   if [ -e /kernelInit ]; then
     for FILE in `${BUSYBOX} strings ./kernelInit`
     do
       FULL_PATH=`${BUSYBOX} echo ${FILE} | ${BUSYBOX} awk '{split($0,a,"="); print a[2]}'`
-      arr+=("${FULL_PATH}")
+      files="$files $FULL_PATH"
     done
   fi
   # kernel not handle this program
   if [ -e /init ]; then
     if [ ! -d /init ]; then
-      arr+=(/init)
+      files="$files /init"
     fi
   fi
   for FILE in `${BUSYBOX} find / -name "preinitMT" -o -name "preinit" -o -name "rcS"`
   do
-    arr+=(${FILE})
+    files="$files $FILE"
   done
 
-  if (( ${#arr[@]} )); then
-    # convert to the unique array following the original order
-    uniq_arr=($(${BUSYBOX} tr ' ' '\n' <<< "${arr[@]}" | ${BUSYBOX} awk '!u[$0]++' | ${BUSYBOX} tr '\n' ' '))
-    for FILE in "${uniq_arr[@]}"
+  if [ -n "$files" ]; then
+    # convert to the unique list following the original order
+    for FILE in `${BUSYBOX} echo $files | ${BUSYBOX} tr ' ' '\n' | ${BUSYBOX} awk '!u[$0]++'`
     do
+      if [ -z "$FILE" ]; then
+        continue
+      fi
       if [ -d ${FILE} ]; then
         continue
       fi

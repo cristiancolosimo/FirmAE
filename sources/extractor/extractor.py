@@ -8,15 +8,18 @@ e.g. 'extractor.py <input> <output>'.
 
 import argparse
 import hashlib
+import json
 import multiprocessing
 import os
 import shutil
+import subprocess
 import tempfile
 import traceback
-import pathlib
 
 import magic
-import binwalk
+
+# Path to the Rust binwalk CLI installed via cargo
+BINWALK_CMD = os.path.expanduser("/home/voidspace/.cargo/bin/binwalk")
 
 class Extractor(object):
     """
@@ -140,6 +143,78 @@ class Extractor(object):
         Internal function used by '_rm' to print out errors.
         """
         print(("!! %s: Cannot delete %s!\n%s" % (function, path, excinfo)))
+
+    @staticmethod
+    def _parse_binwalk_json(json_path):
+        """
+        Parse the Rust binwalk CLI JSON log output which may contain
+        multiple concatenated JSON arrays (one per file analyzed).
+        Returns a list of analysis dicts.
+
+        Handles both well-formed JSON (e.g. [{...}],[{...}]) and
+        malformed formats (e.g. [{...}],{...}],{...}]) produced by
+        certain versions of binwalk.
+        """
+        with open(json_path, 'r') as f:
+            content = f.read()
+
+        # First try: parse as a single valid JSON array
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        analyses = []
+        # Second try: iteratively extract each top-level entry by
+        # tracking bracket depth (both [] and {}), handling string
+        # contents and escape sequences properly.
+        i = 0
+        while i < len(content):
+            # Skip whitespace and commas between entries
+            while i < len(content) and content[i] in ' \t\n\r,':
+                i += 1
+            if i >= len(content):
+                break
+
+            # Start of an entry - could be [ or {
+            if content[i] in ('[', '{'):
+                depth = 1
+                start = i
+                in_str = False
+                esc = False
+                i += 1
+
+                while i < len(content) and depth > 0:
+                    ch = content[i]
+
+                    # Toggle string state on unescaped quotes
+                    if ch == '"' and not esc:
+                        in_str = not in_str
+                    # Track escape sequences within strings
+                    esc = (ch == '\\' and not esc)
+
+                    if not in_str:
+                        if ch in ('{', '['):
+                            depth += 1
+                        elif ch in ('}', ']'):
+                            depth -= 1
+
+                    i += 1
+
+                part = content[start:i]
+                # Ensure the fragment is wrapped in array brackets
+                if not part.startswith('['):
+                    part = '[' + part
+                if not part.endswith(']'):
+                    part = part + ']'
+                try:
+                    analyses.extend(json.loads(part))
+                except json.JSONDecodeError:
+                    pass
+            else:
+                i += 1
+
+        return analyses
 
     @staticmethod
     def io_find_rootfs(start, recurse=True):
@@ -442,38 +517,84 @@ class ExtractionItem(object):
                                   self.extractor.do_kernel,
                                   self.extractor.do_rootfs))
 
-            for module in binwalk.scan(self.item, "--run-as=root", "--preserve-symlinks",
-                    "-e", "-r", "-C", self.temp, signature=True, quiet=True):
-                prev_entry = None
-                for entry in module.results:
-                    desc = entry.description
-                    dir_name = module.extractor.directory
+            # Run Rust binwalk CLI: extract and recursively scan
+            json_output = os.path.join(self.temp, "binwalk_results.json")
+            cmd = [BINWALK_CMD, "-q", "-e", "-M",
+                   "-C", self.temp,
+                   "-l", json_output,
+                   self.item]
 
-                    if prev_entry and prev_entry.description == desc and \
-                            'Zlib comparessed data' in desc:
+            self.printf(">> Running: %s" % " ".join(cmd))
+            result = subprocess.run(cmd, capture_output=True, timeout=300)
+
+            if result.returncode != 0:
+                self.printf(">> binwalk exited with code %d" % result.returncode)
+                self.printf(">> stderr: %s" % result.stderr.decode(errors='replace'))
+
+            # Parse the JSON results
+            if not os.path.exists(json_output):
+                self.printf(">> No JSON output from binwalk")
+                return False
+
+            analyses = Extractor._parse_binwalk_json(json_output)
+            prev_desc = None
+
+            for analysis_data in analyses:
+                analysis = analysis_data.get("Analysis", {})
+                file_map = analysis.get("file_map", [])
+                extractions = analysis.get("extractions", {})
+
+                for entry in file_map:
+                    desc = entry.get("description", "")
+
+                    # Skip duplicate Zlib compressed data entries
+                    if prev_desc and prev_desc == desc and \
+                            'Zlib compressed data' in desc:
                         continue
-                    prev_entry = entry
+                    prev_desc = desc
+
+                    # Get extraction directory for this entry
+                    entry_id = entry.get("id", "")
+                    dir_name = None
+                    if entry_id in extractions:
+                        dir_name = extractions[entry_id].get("output_directory")
 
                     self.printf('========== Depth: %d ===============' % self.depth)
                     self.printf("Name: %s" % self.item)
                     self.printf("Desc: %s" % desc)
                     self.printf("Directory: %s" % dir_name)
 
-                    self._check_firmware(module, entry)
+                    # Check firmware headers (uImage, TP-Link, TRX)
+                    self._check_firmware_from_entry(entry)
 
-                    if not self.get_rootfs_status():
-                        self._check_rootfs(module, entry)
+                    # Check for root filesystem in extraction directory
+                    if not self.get_rootfs_status() and dir_name:
+                        self._check_rootfs_from_dir(dir_name)
 
+                    # Check for kernel
                     if not self.get_kernel_status():
-                        self._check_kernel(module, entry)
+                        self._check_kernel_from_desc(desc)
 
                     if self.update_status():
                         self.printf(">> Skipping: completed!")
                         return True
-                    else:
-                        self._check_recursive(module, entry)
 
+            # Fallback: search all extraction directories for a root filesystem
+            if not self.get_rootfs_status():
+                for analysis_data in analyses:
+                    analysis = analysis_data.get("Analysis", {})
+                    extractions = analysis.get("extractions", {})
+                    for ext_info in extractions.values():
+                        output_dir = ext_info.get("output_directory")
+                        if output_dir and os.path.isdir(output_dir):
+                            self._check_rootfs_from_dir(output_dir)
+                            if self.get_rootfs_status():
+                                break
 
+        except subprocess.TimeoutExpired:
+            self.printf(">> binwalk timed out on %s" % self.item)
+        except FileNotFoundError:
+            self.printf(">> binwalk CLI not found at %s" % BINWALK_CMD)
         except Exception:
             print ("ERROR: ", self.item)
             traceback.print_exc()
@@ -526,18 +647,18 @@ class ExtractionItem(object):
 
         return False
 
-    def _check_firmware(self, module, entry):
+    def _check_firmware_from_entry(self, entry):
         """
         If this file is of a known firmware type, directly attempt to extract
-        the kernel and root filesystem.
+        the kernel and root filesystem. Parsed from Rust binwalk JSON entry.
         """
-        dir_name = module.extractor.directory
-        desc = entry.description
+        desc = entry.get("description", "")
+        offset = entry.get("offset", 0)
         if 'header' in desc:
             # uImage
             if "uImage header" in desc:
                 if not self.get_kernel_status() and "OS Kernel Image" in desc:
-                    kernel_offset = entry.offset + 64
+                    kernel_offset = offset + 64
                     kernel_size = 0
 
                     for stmt in desc.split(','):
@@ -556,11 +677,6 @@ class ExtractionItem(object):
                         kernel = ExtractionItem(self.extractor, tmp_path,
                                                 self.depth, self.tag, self.debug)
                         return kernel.extract()
-                # elif "RAMDisk Image" in entry.description:
-                #     self.printf(">>>> %s" % entry.description)
-                #     self.printf(">>>> Skipping: RAMDisk / initrd")
-                #     self.terminate = True
-                #     return True
 
             # TP-Link or TRX
             elif not self.get_kernel_status() and \
@@ -586,8 +702,8 @@ class ExtractionItem(object):
                         rootfs_size = int(stmt.split(':')[1], 16)
 
                 # add entry offset
-                kernel_offset += entry.offset
-                rootfs_offset += entry.offset + header_size
+                kernel_offset += offset
+                rootfs_offset += offset + header_size
 
                 # compute sizes if only offsets provided
                 if rootfs_offset < kernel_offset:
@@ -631,15 +747,14 @@ class ExtractionItem(object):
                     return True
         return False
 
-    def _check_kernel(self, module, entry):
+    def _check_kernel_from_desc(self, desc):
         """
         If this file contains a kernel version string, assume it is a kernel.
         Only Linux kernels are currently extracted.
         """
-        dir_name = module.extractor.directory
-        desc = entry.description
         if 'kernel' in desc:
-            if self.get_kernel_status(): return True
+            if self.get_kernel_status():
+                return True
             else:
                 if "kernel version" in desc:
                     self.update_database("kernel_version", desc)
@@ -655,83 +770,22 @@ class ExtractionItem(object):
                         self.printf(">>>> Ignoring: %s" % desc)
         return False
 
-    def _check_rootfs(self, module, entry):
+    def _check_rootfs_from_dir(self, dir_name):
         """
-        If this file contains a known filesystem type, extract it.
+        Check if the specified directory contains a Linux root filesystem.
         """
-        dir_name = module.extractor.directory
-        desc = entry.description
-        if 'filesystem' in desc or 'archive' in desc or 'compressed' in desc:
-            if self.get_rootfs_status(): return True
+        if dir_name and os.path.isdir(dir_name):
+            unix = Extractor.io_find_rootfs(dir_name)
+            if unix[0]:
+                self.printf(">>>> Found Linux filesystem in %s!" % unix[1])
+                if self.output:
+                    shutil.make_archive(self.output, "gztar",
+                                        root_dir=unix[1])
+                else:
+                    self.extractor.do_rootfs = False
+                return True
             else:
-                if dir_name:
-                    unix = Extractor.io_find_rootfs(dir_name)
-                    if not unix[0]:
-                        self.printf(">>>> Extraction failed!")
-                        return False
-
-                    self.printf(">>>> Found Linux filesystem in %s!" % unix[1])
-                    if self.output:
-                        shutil.make_archive(self.output, "gztar",
-                                            root_dir=unix[1])
-                    else:
-                        self.extractor.do_rootfs = False
-                    return True
-        return False
-
-    # treat both archived and compressed files using the same pathway. this is
-    # because certain files may appear as e.g. "xz compressed data" but still
-    # extract into a root filesystem.
-    def _check_recursive(self, module, entry):
-        """
-        Unified implementation for checking both "archive" and "compressed"
-        items.
-        """
-        dir_name = module.extractor.directory
-        desc = entry.description
-        # filesystem for the netgear WNR2000 firmware (kernel in Squashfs)
-        if 'filesystem' in desc or 'archive' in desc or 'compressed' in desc:
-            if dir_name:
-                self.printf(">> Recursing into %s ..." % desc)
-                count = 0
-                for root, dirs, files in os.walk(dir_name):
-                    # sort both descending alphabetical and increasing
-                    # length
-                    files.sort()
-                    files.sort(key=len)
-                    if (not self.extractor.do_rootfs or self.get_rootfs_status()) and 'bin' in dirs and 'lib' in dirs:
-                        break
-
-                    # handle case where original file name is restored; put
-                    # it to front of queue
-                    if desc and "original file name:" in desc:
-                        orig = None
-                        for stmt in desc.split(","):
-                            if "original file name:" in stmt:
-                                orig = stmt.split("\"")[1]
-                        if orig and orig in files:
-                            files.remove(orig)
-                            files.insert(0, orig)
-
-                    for filename in files:
-#                        if count > ExtractionItem.RECURSION_BREADTH:
-#                            self.printf(">> Skipping: recursion breadth %d"\
-#                                % ExtractionItem.RECURSION_BREADTH)
-#                            return False
-
-                        path = os.path.join(root, filename)
-                        if not pathlib.Path(path).is_file():
-                            continue
-                        new_item = ExtractionItem(self.extractor,
-                                                  path,
-                                                  self.depth + 1,
-                                                  self.tag,
-                                                  self.debug)
-                        if new_item.extract():
-                            if self.update_status():
-                                return True
-
-                        count += 1
+                self.printf(">>>> No rootfs found in %s" % dir_name)
         return False
 
 def psql_check(psql_ip):

@@ -16,26 +16,26 @@ if (${FIRMAE_BOOT}); then
   fi
   ${BUSYBOX} ln -s /firmadyne/busybox /firmadyne/sh
 
-  mkdir -p "$(resolve_link /proc)"
-  mkdir -p "$(resolve_link /dev/pts)"
-  mkdir -p "$(resolve_link /etc_ro)"
-  mkdir -p "$(resolve_link /tmp)"
-  mkdir -p "$(resolve_link /var)"
-  mkdir -p "$(resolve_link /run)"
-  mkdir -p "$(resolve_link /sys)"
-  mkdir -p "$(resolve_link /root)"
-  mkdir -p "$(resolve_link /tmp/var)"
-  mkdir -p "$(resolve_link /tmp/media)"
-  mkdir -p "$(resolve_link /tmp/etc)"
-  mkdir -p "$(resolve_link /tmp/var/run)"
-  mkdir -p "$(resolve_link /tmp/home/root)"
-  mkdir -p "$(resolve_link /tmp/mnt)"
-  mkdir -p "$(resolve_link /tmp/opt)"
-  mkdir -p "$(resolve_link /tmp/www)"
-  mkdir -p "$(resolve_link /var/run)"
-  mkdir -p "$(resolve_link /var/lock)"
-  mkdir -p "$(resolve_link /usr/bin)"
-  mkdir -p "$(resolve_link /usr/sbin)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /proc)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /dev/pts)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /etc_ro)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /var)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /run)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /sys)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /root)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/var)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/media)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/etc)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/var/run)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/home/root)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/mnt)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/opt)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /tmp/www)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /var/run)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /var/lock)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /usr/bin)"
+  ${BUSYBOX} mkdir -p "$(resolve_link /usr/sbin)"
 
   ${BUSYBOX} chmod a+x -R `${BUSYBOX} find / -type d \( -name bin -o -name sbin \)`
 
@@ -44,31 +44,31 @@ if (${FIRMAE_BOOT}); then
     DIR=`${BUSYBOX} dirname "${FILE}"`
     if (! ${BUSYBOX} echo "${DIR}" | ${BUSYBOX} egrep -q "(%s|%c|%d|/tmp/services)");then
       ${BUSYBOX} echo "${DIR}" >> /firmadyne/dir_log
-      mkdir -p "$(resolve_link ${DIR})"
+      ${BUSYBOX} mkdir -p "$(resolve_link ${DIR})"
     fi
   done
 fi
 
 # make /etc and add some essential files
-mkdir -p "$(resolve_link /etc)"
+${BUSYBOX} mkdir -p "$(resolve_link /etc)"
 if [ ! -s /etc/TZ ]; then
-    mkdir -p "$(dirname $(resolve_link /etc/TZ))"
+    ${BUSYBOX} mkdir -p "$(${BUSYBOX} dirname $(resolve_link /etc/TZ))"
     echo "EST5EDT" > "$(resolve_link /etc/TZ)"
 fi
 
 if [ ! -s /etc/hosts ]; then
-    mkdir -p "$(dirname $(resolve_link /etc/hosts))"
+    ${BUSYBOX} mkdir -p "$(${BUSYBOX} dirname $(resolve_link /etc/hosts))"
     echo "127.0.0.1 localhost" > "$(resolve_link /etc/hosts)"
 fi
 
 if [ ! -s /etc/passwd ]; then
-    mkdir -p "$(dirname $(resolve_link /etc/passwd))"
+    ${BUSYBOX} mkdir -p "$(${BUSYBOX} dirname $(resolve_link /etc/passwd))"
     echo "root::0:0:root:/root:/bin/sh" > "$(resolve_link /etc/passwd)"
 fi
 
 # make /dev and add default device nodes if current /dev does not have greater
 # than 5 device nodes
-mkdir -p "$(resolve_link /dev)"
+${BUSYBOX} mkdir -p "$(resolve_link /dev)"
 FILECOUNT="$($BUSYBOX find /dev -maxdepth 1 -type b -o -type c -print | $BUSYBOX wc -l)"
 if [ $FILECOUNT -lt "5" ]; then
     echo "Warning: Recreating device nodes!"
@@ -101,7 +101,7 @@ if [ $FILECOUNT -lt "5" ]; then
     ${TMP_BUSYBOX} mknod -m 644 /dev/ppp c 108 0
     ${TMP_BUSYBOX} mknod -m 666 /dev/hidraw0 c 251 0
 
-    mkdir -p /dev/mtd
+    ${BUSYBOX} mkdir -p /dev/mtd
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtd/0 c 90 0
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtd/1 c 90 2
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtd/2 c 90 4
@@ -137,7 +137,7 @@ if [ $FILECOUNT -lt "5" ]; then
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtd10 c 90 20
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdr10 c 90 21
 
-    mkdir -p /dev/mtdblock
+    ${BUSYBOX} mkdir -p /dev/mtdblock
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdblock/0 b 31 0
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdblock/1 b 31 1
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdblock/2 b 31 2
@@ -162,7 +162,7 @@ if [ $FILECOUNT -lt "5" ]; then
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdblock9 b 31 9
     ${TMP_BUSYBOX} mknod -m 644 /dev/mtdblock10 b 31 10
 
-    mkdir -p /dev/tts
+    ${BUSYBOX} mkdir -p /dev/tts
     ${TMP_BUSYBOX} mknod -m 660 /dev/tts/0 c 4 64
     ${TMP_BUSYBOX} mknod -m 660 /dev/tts/1 c 4 65
     ${TMP_BUSYBOX} mknod -m 660 /dev/tts/2 c 4 66
@@ -175,29 +175,29 @@ if ($BUSYBOX grep -sq "/dev/gpio/in" /bin/gpio) ||
   ($BUSYBOX grep -sq "/dev/gpio/in" /usr/lib/libshared.so); then
     echo "Creating /dev/gpio/in!"
     if (${FIRMAE_BOOT}); then
-      rm /dev/gpio
+      ${BUSYBOX} rm /dev/gpio
     fi
-    mkdir -p /dev/gpio
-    echo -ne "\xff\xff\xff\xff" > /dev/gpio/in
+    ${BUSYBOX} mkdir -p /dev/gpio
+    printf "\xff\xff\xff\xff" > /dev/gpio/in
 fi
 
 # prevent system from rebooting
 if (${FIRMAE_BOOT}); then
   echo "Removing /sbin/reboot!"
-  rm -f /sbin/reboot
+  ${BUSYBOX} rm -f /sbin/reboot
 fi
 echo "Removing /etc/scripts/sys_resetbutton!"
-rm -f /etc/scripts/sys_resetbutton
+${BUSYBOX} rm -f /etc/scripts/sys_resetbutton
 
 # add some default nvram entries
 if $BUSYBOX grep -sq "ipv6_6to4_lan_ip" /sbin/rc; then
     echo "Creating default ipv6_6to4_lan_ip!"
-    echo -n "2002:7f00:0001::" > /firmadyne/libnvram.override/ipv6_6to4_lan_ip
+    printf "2002:7f00:0001::" > /firmadyne/libnvram.override/ipv6_6to4_lan_ip
 fi
 
 if $BUSYBOX grep -sq "time_zone_x" /lib/libacos_shared.so; then
     echo "Creating default time_zone_x!"
-    echo -n "0" > /firmadyne/libnvram.override/time_zone_x
+    printf "0" > /firmadyne/libnvram.override/time_zone_x
 fi
 
 if $BUSYBOX grep -sq "rip_multicast" /usr/sbin/httpd; then
