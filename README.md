@@ -8,9 +8,11 @@ Eseguire
 ```
 # Download binari 
 ./download.sh 
-pip install psycopg2-binary
+pip install psycopg2-binary telnetlib3
 
 sudo ./run.sh -r dlink firmwares/originale.bin
+
+
 ```
 
 # QUASI TUTTI I FIX SONO STATI EFFETTUATI TRAMITE AI (Deepseek V4) NESSUNA RESPONSABILITÀ
