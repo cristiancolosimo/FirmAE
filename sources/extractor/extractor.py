@@ -19,6 +19,7 @@ import traceback
 import magic
 
 # Path to the Rust binwalk CLI installed via cargo
+# ! TODO Cambiare con la path di binwalk rust v3
 BINWALK_CMD = os.path.expanduser("/home/voidspace/.cargo/bin/binwalk")
 
 class Extractor(object):

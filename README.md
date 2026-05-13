@@ -1,3 +1,20 @@
+
+# Appunti 
+
+Installare binwalk v3 (rust) con cargo. (installare saquash per binwalk e metterlo nella PATH)
+Cambiare il path in FirmAE/sources/extractor/extractor.py (BINWALK_CMD = os.path.expanduser("/home/voidspace/.cargo/bin/binwalk")) (poi lo rendo generico)
+
+Eseguire
+```
+# Download binari 
+./download.sh 
+pip install psycopg2-binary
+
+sudo ./run.sh -r dlink firmwares/originale.bin
+```
+
+# QUASI TUTTI I FIX SONO STATI EFFETTUATI TRAMITE AI (Deepseek V4) NESSUNA RESPONSABILITÀ
+
 # FirmAE
 
 FirmAE is a fully-automated framework that performs emulation and vulnerability analysis. FirmAE significantly increases the emulation success rate (From [Firmadyne](https://github.com/firmadyne/firmadyne)'s 16.28% to 79.36%) with five arbitration techniques. We tested FirmAE on 1,124 wireless-router and IP-camera firmware images from top eight vendors.
