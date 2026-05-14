@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:14
+    container_name: firmae-postgres
+    environment:
+      POSTGRES_DB: firmware
+      POSTGRES_USER: firmadyne
+      POSTGRES_PASSWORD: firmadyne
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./FirmAE/database/schema:/docker-entrypoint-initdb.d/01-schema.sql
+    restart: unless-stopped
+
+volumes:
+  pgdata:

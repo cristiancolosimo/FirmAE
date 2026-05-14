@@ -10,7 +10,12 @@ Eseguire
 ./download.sh 
 pip install psycopg2-binary telnetlib3
 
-sudo ./run.sh -r dlink firmwares/originale.bin
+# Avvio DB
+docker compose up -d  
+
+# Emulazione
+sudo ./run.sh -d dlink firmwares/originale.bin
+
 
 
 ```
